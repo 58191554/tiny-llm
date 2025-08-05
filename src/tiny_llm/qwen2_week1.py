@@ -40,15 +40,43 @@ class Qwen2MLP:
         self,
         dim: int,
         hidden_dim: int,
-        w_gate: mx.array,
-        w_up: mx.array,
-        w_down: mx.array,
+        w_gate: mx.array,  # shape (I, E)
+        w_up: mx.array,    # shape (I, E)
+        w_down: mx.array,  # shape (E, I)
     ):
-        pass
+        self.D = dim
+        self.H = hidden_dim
+        self.w_gate = w_gate
+        self.w_up = w_up
+        self.w_down = w_down
 
     def __call__(self, x: mx.array) -> mx.array:
-        pass
+        """
+        N.. is zero or more dimensions for batches
+        E is hidden_size (embedding dimension of the model)
+        I is intermediate_size (dimension of the hidden layer in MLP)
+        L is the sequence length
 
+        input: N.. x L x E
+        w_gate: I x E
+        w_up: I x E
+        w_down: E x I
+        output: N.. x L x E
+        """
+        # 1. Linear projection for gate and up: x @ W.T (E → I)
+        gate_proj = mx.matmul(x, self.w_gate.T)  # shape: N.. x L x I
+        up_proj = mx.matmul(x, self.w_up.T)      # shape: N.. x L x I
+
+        # 2. Apply SiLU activation to gate projection
+        activated_gate = silu(gate_proj)      # shape: N.. x L x I
+
+        # 3. Element-wise multiply (gating)
+        gated = activated_gate * up_proj      # shape: N.. x L x I
+
+        # 4. Final down projection: I → E
+        out = mx.matmul(gated, self.w_down.T)    # shape: N.. x L x E
+
+        return out
 
 class Qwen2TransformerBlock:
     def __init__(
